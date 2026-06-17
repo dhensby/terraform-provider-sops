@@ -184,7 +184,11 @@ See documentation:
 * [Write-Only arguments](https://developer.hashicorp.com/terraform/language/manage-sensitive-data/write-only)
 
 ## Versioning write-only arguments with `last_modified`
-The `sops_file` and `sops_external` data sources expose the SOPS `lastmodified` timestamp two ways: `last_modified` (an RFC3339 string) and `last_modified_unix` (a Unix epoch integer). The timestamp changes every time the file is re-encrypted and is not secret, which makes it a natural `wo_version` — feed `last_modified_unix` straight into the integer version argument and Terraform re-pushes the secret automatically whenever the encrypted file changes, with no manual version bumps.
+Every sops file records a `lastmodified` timestamp in its (unencrypted) metadata that is updated each time the file is re-encrypted. Because it is non-secret and changes whenever the contents do, it makes a natural `wo_version` for [write-only arguments](https://developer.hashicorp.com/terraform/language/manage-sensitive-data/write-only): point the version argument at it and Terraform re-pushes the secret automatically whenever the file changes, with no manual version bumps.
+
+The timestamp is exposed as two computed attributes — `last_modified` (an RFC3339 string) and `last_modified_unix` (a Unix epoch integer, ready to use as an integer `wo_version`) — on every data source and ephemeral resource, as well as on the dedicated `sops_file_metadata` and `sops_external_metadata` data sources.
+
+The `*_metadata` data sources read **only** the metadata: the file is never decrypted, so no data key access (KMS, age, PGP, …) is needed and no secret values are written to state. Pair one with a `sops_file` ephemeral resource to keep the secret out of state entirely while still versioning it automatically:
 
 ```hcl
 terraform {
@@ -196,19 +200,25 @@ terraform {
   }
 }
 
-data "sops_file" "secrets" {
+# Timestamp only — the file is not decrypted and no secrets are written to state.
+data "sops_file_metadata" "secrets" {
+  source_file = "demo-secret.enc.json"
+}
+
+# The secret value, read ephemerally so it never lands in state.
+ephemeral "sops_file" "secrets" {
   source_file = "demo-secret.enc.json"
 }
 
 resource "aws_ssm_parameter" "sops_secrets" {
   name             = "my-secrets"
   type             = "SecureString"
-  value_wo         = data.sops_file.secrets.data["password"]
-  value_wo_version = data.sops_file.secrets.last_modified_unix
+  value_wo         = ephemeral.sops_file.secrets.data["password"]
+  value_wo_version = data.sops_file_metadata.secrets.last_modified_unix
 }
 ```
 
 > [!NOTE]
-> A `*_wo_version` argument is stored in Terraform state, so it must be given a *non-ephemeral* value. Read `last_modified_unix` (or `last_modified`) from the **data sources**, whose attributes are persisted. The **ephemeral** resources expose the same attributes, but — like every ephemeral attribute — they are themselves ephemeral, and Terraform rejects them in a `*_wo_version` argument (`Invalid use of ephemeral value … must be persisted to state`). Note also that the data source decrypts the file into state; if you need the secrets kept out of state entirely, use the ephemeral resource for `value_wo` and manage `value_wo_version` yourself.
+> A `*_wo_version` argument is stored in Terraform state, so it must be given a *non-ephemeral* value. The `last_modified`/`last_modified_unix` attributes of the **data sources** (including the `*_metadata` ones) are persisted and can be used directly. The same attributes on the **ephemeral** resources are themselves ephemeral, and Terraform rejects them in a `*_wo_version` argument (`Invalid use of ephemeral value … must be persisted to state`).
 
 
