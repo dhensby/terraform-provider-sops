@@ -183,4 +183,32 @@ See documentation:
 * [Ephemeral block](https://developer.hashicorp.com/terraform/language/block/ephemeral)
 * [Write-Only arguments](https://developer.hashicorp.com/terraform/language/manage-sensitive-data/write-only)
 
+## Versioning write-only arguments with `last_modified`
+The `sops_file` and `sops_external` data sources expose the SOPS `lastmodified` timestamp two ways: `last_modified` (an RFC3339 string) and `last_modified_unix` (a Unix epoch integer). The timestamp changes every time the file is re-encrypted and is not secret, which makes it a natural `wo_version` — feed `last_modified_unix` straight into the integer version argument and Terraform re-pushes the secret automatically whenever the encrypted file changes, with no manual version bumps.
+
+```hcl
+terraform {
+  required_providers {
+    sops = {
+      source  = "carlpett/sops"
+      version = "~> 1.5.0"
+    }
+  }
+}
+
+data "sops_file" "secrets" {
+  source_file = "demo-secret.enc.json"
+}
+
+resource "aws_ssm_parameter" "sops_secrets" {
+  name             = "my-secrets"
+  type             = "SecureString"
+  value_wo         = data.sops_file.secrets.data["password"]
+  value_wo_version = data.sops_file.secrets.last_modified_unix
+}
+```
+
+> [!NOTE]
+> A `*_wo_version` argument is stored in Terraform state, so it must be given a *non-ephemeral* value. Read `last_modified_unix` (or `last_modified`) from the **data sources**, whose attributes are persisted. The **ephemeral** resources expose the same attributes, but — like every ephemeral attribute — they are themselves ephemeral, and Terraform rejects them in a `*_wo_version` argument (`Invalid use of ephemeral value … must be persisted to state`). Note also that the data source decrypts the file into state; if you need the secrets kept out of state entirely, use the ephemeral resource for `value_wo` and manage `value_wo_version` yourself.
+
 
