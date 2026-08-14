@@ -2,6 +2,7 @@ package sops
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -33,9 +34,9 @@ func readData(content []byte, format string) (sopsData, error) {
 		return sopsData{}, fmt.Errorf("Error decrypting sops file: %w", err)
 	}
 
-	lastModified, err := readMetadata(content, format)
+	lastModified, err := readLastModified(content, format)
 	if err != nil {
-		return sopsData{}, err
+		return sopsData{}, fmt.Errorf("Error reading sops metadata: %w", err)
 	}
 
 	var data map[string]interface{}
@@ -60,16 +61,17 @@ func readData(content []byte, format string) (sopsData, error) {
 	}, nil
 }
 
-// readMetadata returns the lastmodified timestamp recorded in the sops metadata.
-// It parses the document without decrypting it (see loadMetadata), so it needs
-// no access to the data key and never reads any secret values.
-func readMetadata(content []byte, format string) (time.Time, error) {
+// readLastModified parses the sops metadata of an encrypted document (see
+// loadMetadata) and returns the lastmodified timestamp recorded there. It
+// never decrypts the document, so it needs no access to the data key and
+// never reads any secret values.
+func readLastModified(content []byte, format string) (time.Time, error) {
 	metadata, err := loadMetadata(content, format)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("Error reading sops metadata: %w", err)
+		return time.Time{}, err
 	}
 	if metadata.LastModified.IsZero() {
-		return time.Time{}, fmt.Errorf("Error reading sops metadata: missing lastmodified timestamp")
+		return time.Time{}, errors.New("missing lastmodified timestamp")
 	}
 	return metadata.LastModified, nil
 }

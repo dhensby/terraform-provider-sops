@@ -80,7 +80,7 @@ func (d *fileMetadataDataSource) Read(ctx context.Context, req datasource.ReadRe
 		if detailedErr, ok := err.(summaryError); ok {
 			resp.Diagnostics.AddError(detailedErr.Summary, detailedErr.Err.Error())
 		} else {
-			resp.Diagnostics.AddError("Failed to read file metadata", err.Error())
+			resp.Diagnostics.AddError("Failed to read metadata", err.Error())
 		}
 		return
 	}
