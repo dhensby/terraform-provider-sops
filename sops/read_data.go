@@ -6,15 +6,15 @@ import (
 	"fmt"
 
 	"github.com/getsops/sops/v3"
-	"github.com/getsops/sops/v3/decrypt"
+	"github.com/getsops/sops/v3/keyservice"
 	"gopkg.in/yaml.v3"
 
 	"github.com/carlpett/terraform-provider-sops/sops/internal/dotenv"
 	"github.com/carlpett/terraform-provider-sops/sops/internal/ini"
 )
 
-func readData(content []byte, format string) (map[string]string, string, error) {
-	cleartext, err := decrypt.Data(content, format)
+func readData(content []byte, format string, svc keyservice.KeyServiceClient) (map[string]string, string, error) {
+	cleartext, err := decryptData(content, format, svc)
 	if err != nil {
 		// sops reports why each individual key failed through UserError, while
 		// Error only says how many key groups succeeded. Without the former, an

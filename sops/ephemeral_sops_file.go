@@ -3,18 +3,28 @@ package sops
 import (
 	"context"
 
+	"github.com/getsops/sops/v3/keyservice"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ ephemeral.EphemeralResource = &fileEphemeralResource{}
+var (
+	_ ephemeral.EphemeralResource              = &fileEphemeralResource{}
+	_ ephemeral.EphemeralResourceWithConfigure = &fileEphemeralResource{}
+)
 
 func newFileEphemeralResource() ephemeral.EphemeralResource {
 	return &fileEphemeralResource{}
 }
 
-type fileEphemeralResource struct{}
+type fileEphemeralResource struct {
+	keyService keyservice.KeyServiceClient
+}
+
+func (d *fileEphemeralResource) Configure(_ context.Context, req ephemeral.ConfigureRequest, _ *ephemeral.ConfigureResponse) {
+	d.keyService = keyServiceFrom(req.ProviderData)
+}
 
 type fileEphemeralResourceModel struct {
 	InputType  types.String `tfsdk:"input_type"`
@@ -65,7 +75,7 @@ func (d *fileEphemeralResource) Open(ctx context.Context, req ephemeral.OpenRequ
 		return
 	}
 
-	data, raw, err := getFileData(config.SourceFile, config.InputType)
+	data, raw, err := getFileData(config.SourceFile, config.InputType, d.keyService)
 	if err != nil {
 		if detailedErr, ok := err.(summaryError); ok {
 			resp.Diagnostics.AddError(detailedErr.Summary, detailedErr.Err.Error())

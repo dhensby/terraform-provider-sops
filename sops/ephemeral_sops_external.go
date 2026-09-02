@@ -3,18 +3,28 @@ package sops
 import (
 	"context"
 
+	"github.com/getsops/sops/v3/keyservice"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/ephemeral/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ ephemeral.EphemeralResource = &externalEphemeralResource{}
+var (
+	_ ephemeral.EphemeralResource              = &externalEphemeralResource{}
+	_ ephemeral.EphemeralResourceWithConfigure = &externalEphemeralResource{}
+)
 
 func newExternalEphemeral() ephemeral.EphemeralResource {
 	return &externalEphemeralResource{}
 }
 
-type externalEphemeralResource struct{}
+type externalEphemeralResource struct {
+	keyService keyservice.KeyServiceClient
+}
+
+func (d *externalEphemeralResource) Configure(_ context.Context, req ephemeral.ConfigureRequest, _ *ephemeral.ConfigureResponse) {
+	d.keyService = keyServiceFrom(req.ProviderData)
+}
 
 type externalEphemeralModel struct {
 	InputType types.String `tfsdk:"input_type"`
@@ -63,7 +73,7 @@ func (d *externalEphemeralResource) Open(ctx context.Context, req ephemeral.Open
 		return
 	}
 
-	data, raw, err := getExternalData(config.Source, config.InputType)
+	data, raw, err := getExternalData(config.Source, config.InputType, d.keyService)
 	if err != nil {
 		if detailedErr, ok := err.(summaryError); ok {
 			resp.Diagnostics.AddError(detailedErr.Summary, detailedErr.Err.Error())

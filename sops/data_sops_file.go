@@ -3,18 +3,28 @@ package sops
 import (
 	"context"
 
+	"github.com/getsops/sops/v3/keyservice"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &fileDataSource{}
+var (
+	_ datasource.DataSource              = &fileDataSource{}
+	_ datasource.DataSourceWithConfigure = &fileDataSource{}
+)
 
 func newFileDataSource() datasource.DataSource {
 	return &fileDataSource{}
 }
 
-type fileDataSource struct{}
+type fileDataSource struct {
+	keyService keyservice.KeyServiceClient
+}
+
+func (d *fileDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, _ *datasource.ConfigureResponse) {
+	d.keyService = keyServiceFrom(req.ProviderData)
+}
 
 type fileDataSourceModel struct {
 	InputType  types.String `tfsdk:"input_type"`
@@ -70,7 +80,7 @@ func (d *fileDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	data, raw, err := getFileData(config.SourceFile, config.InputType)
+	data, raw, err := getFileData(config.SourceFile, config.InputType, d.keyService)
 	if err != nil {
 		if detailedErr, ok := err.(summaryError); ok {
 			resp.Diagnostics.AddError(detailedErr.Summary, detailedErr.Err.Error())

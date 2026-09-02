@@ -3,18 +3,28 @@ package sops
 import (
 	"context"
 
+	"github.com/getsops/sops/v3/keyservice"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-var _ datasource.DataSource = &externalDataSource{}
+var (
+	_ datasource.DataSource              = &externalDataSource{}
+	_ datasource.DataSourceWithConfigure = &externalDataSource{}
+)
 
 func newExternalDataSource() datasource.DataSource {
 	return &externalDataSource{}
 }
 
-type externalDataSource struct{}
+type externalDataSource struct {
+	keyService keyservice.KeyServiceClient
+}
+
+func (d *externalDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, _ *datasource.ConfigureResponse) {
+	d.keyService = keyServiceFrom(req.ProviderData)
+}
 
 type externalDataSourceModel struct {
 	InputType types.String `tfsdk:"input_type"`
@@ -68,7 +78,7 @@ func (d *externalDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	data, raw, err := getExternalData(config.Source, config.InputType)
+	data, raw, err := getExternalData(config.Source, config.InputType, d.keyService)
 	if err != nil {
 		if detailedErr, ok := err.(summaryError); ok {
 			resp.Diagnostics.AddError(detailedErr.Summary, detailedErr.Err.Error())
