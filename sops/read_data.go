@@ -2,6 +2,7 @@ package sops
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/getsops/sops/v3"
@@ -14,10 +15,14 @@ import (
 
 func readData(content []byte, format string) (map[string]string, string, error) {
 	cleartext, err := decrypt.Data(content, format)
-	if userErr, ok := err.(sops.UserError); ok {
-		err = userErr
-	}
 	if err != nil {
+		// sops reports why each individual key failed through UserError, while
+		// Error only says how many key groups succeeded. Without the former, an
+		// authentication failure is indistinguishable from a missing key.
+		var userErr sops.UserError
+		if errors.As(err, &userErr) {
+			err = errors.New(userErr.UserError())
+		}
 		return nil, "", fmt.Errorf("Error decrypting sops file: %w", err)
 	}
 

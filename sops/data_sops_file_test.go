@@ -3,6 +3,7 @@ package sops
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -163,6 +164,30 @@ func TestDataSourceSopsFile_json(t *testing.T) {
 					resource.TestCheckResourceAttr("data.sops_file.test_json", "data.bool", "true"),
 					resource.TestCheckResourceAttr("data.sops_file.test_json", "data.null", "null"),
 				),
+			},
+		},
+	})
+}
+
+const configTestDataSourceSopsFile_undecryptable = `
+data "sops_file" "test_undecryptable" {
+  source_file = "%s/test-fixtures/undecryptable.yaml"
+}`
+
+// A failure must say which key could not be used and why. sops reports that
+// through UserError; its plain Error only gives a count of successful key
+// groups, which is not enough to tell a missing key from a rejected credential.
+func TestDataSourceSopsFile_undecryptableReportsCause(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      fmt.Sprintf(configTestDataSourceSopsFile_undecryptable, wd),
+				ExpectError: regexp.MustCompile(`(?s)0000000000000000000000000000000000000000.*FAILED`),
 			},
 		},
 	})
